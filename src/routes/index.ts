@@ -14,3 +14,4 @@ router.use('/admin', adminRoutes);
 router.use('/checkin', checkinRoutes);
 
 export default router;
+

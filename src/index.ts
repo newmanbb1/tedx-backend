@@ -57,3 +57,4 @@ app.listen(PORT, () => {
   console.log(`🚀 Servidor backend TEDx corriendo en http://localhost:${PORT}`);
   console.log(`📂 Carpeta de comprobantes: ${uploadsDir}`);
 });
+

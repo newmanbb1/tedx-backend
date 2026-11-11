@@ -10,3 +10,4 @@ router.get('/status/:idOrNumber', OrderController.getStatus);
 router.get('/ticket/:code', OrderController.getTicket);
 
 export default router;
+

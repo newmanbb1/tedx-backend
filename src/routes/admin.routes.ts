@@ -14,3 +14,4 @@ router.post('/orders/:id/reject', AdminController.rejectOrder);
 router.put('/payment-settings/:id', AdminController.updatePaymentSettings);
 
 export default router;
+

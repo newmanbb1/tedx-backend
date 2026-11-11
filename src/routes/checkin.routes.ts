@@ -11,3 +11,4 @@ router.post('/validate', CheckInController.validateTicket);
 router.get('/search', CheckInController.searchAttendees);
 
 export default router;
+

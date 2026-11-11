@@ -59,3 +59,4 @@ export class AuthController {
     return res.json({ user: req.user });
   }
 }
+

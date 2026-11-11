@@ -6,3 +6,4 @@ const router = Router();
 router.get('/public', EventController.getPublicEvent);
 
 export default router;
+

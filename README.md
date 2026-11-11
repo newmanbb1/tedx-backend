@@ -54,3 +54,4 @@ El servidor correrá en `http://localhost:4000`.
 
 - **Administrador**: `admin@tedx.local` / `AdminTedx2026!`
 - **Staff Puerta**: `staff@tedx.local` / `StaffTedx2026!`
+
