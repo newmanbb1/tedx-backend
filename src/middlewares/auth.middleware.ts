@@ -16,7 +16,10 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Token de autenticación no proporcionado' });
+      return res.status(401).json({
+        error: 'Token de autenticación no proporcionado',
+        code: 'NO_TOKEN_PROVIDED',
+      });
     }
 
     const token = authHeader.split(' ')[1];
@@ -30,24 +33,44 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     });
 
     if (!user) {
-      return res.status(401).json({ error: 'Usuario no encontrado o sesión inválida' });
+      return res.status(401).json({
+        error: 'Usuario no encontrado o sesión revocada',
+        code: 'USER_NOT_FOUND',
+      });
     }
 
     req.user = user;
     next();
-  } catch (error) {
-    return res.status(401).json({ error: 'Token inválido o expirado' });
+  } catch (error: any) {
+    if (error instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({
+        error: 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
+        code: 'TOKEN_EXPIRED',
+      });
+    }
+    return res.status(401).json({
+      error: 'Token de autenticación inválido o alterado',
+      code: 'INVALID_TOKEN',
+    });
   }
 };
 
 export const requireRole = (allowedRoles: Role[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
-      return res.status(401).json({ error: 'No autenticado' });
+      return res.status(401).json({
+        error: 'No autenticado',
+        code: 'UNAUTHENTICATED',
+      });
     }
 
     if (!allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'No tienes los permisos requeridos para esta acción' });
+      return res.status(403).json({
+        error: 'No tienes los permisos requeridos para acceder a este recurso',
+        code: 'FORBIDDEN',
+        requiredRoles: allowedRoles,
+        currentRole: req.user.role,
+      });
     }
 
     next();

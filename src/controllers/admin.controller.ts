@@ -157,5 +157,32 @@ export class AdminController {
       return res.status(400).json({ error: 'No se pudo actualizar la configuración bancaria' });
     }
   }
+
+  static async updateTicketType(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { name, description, price, totalQuota, remainingQuota, isActive } = req.body;
+
+      const updated = await prisma.ticketType.update({
+        where: { id },
+        data: {
+          name,
+          description,
+          price: price !== undefined ? Number(price) : undefined,
+          totalQuota: totalQuota !== undefined ? Number(totalQuota) : undefined,
+          remainingQuota: remainingQuota !== undefined ? Number(remainingQuota) : undefined,
+          isActive,
+        },
+      });
+
+      return res.json({
+        message: 'Categoría de entrada actualizada exitosamente',
+        ticketType: updated,
+      });
+    } catch (error: any) {
+      console.error('Error al actualizar categoría de entrada:', error);
+      return res.status(400).json({ error: 'No se pudo actualizar la categoría de entrada' });
+    }
+  }
 }
 

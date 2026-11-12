@@ -15,29 +15,40 @@ export class AuthController {
     try {
       const parsed = loginSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.issues[0].message });
+        return res.status(400).json({
+          error: parsed.error.issues[0].message,
+          code: 'VALIDATION_ERROR',
+        });
       }
 
       const { email, password } = parsed.data;
+      const sanitizedEmail = email.trim().toLowerCase();
 
       const user = await prisma.user.findUnique({
-        where: { email: email.toLowerCase() },
+        where: { email: sanitizedEmail },
       });
 
       if (!user) {
-        return res.status(401).json({ error: 'Credenciales inválidas' });
+        return res.status(401).json({
+          error: 'Credenciales inválidas',
+          code: 'INVALID_CREDENTIALS',
+        });
       }
 
       const passwordMatch = await bcrypt.compare(password, user.passwordHash);
       if (!passwordMatch) {
-        return res.status(401).json({ error: 'Credenciales inválidas' });
+        return res.status(401).json({
+          error: 'Credenciales inválidas',
+          code: 'INVALID_CREDENTIALS',
+        });
       }
 
       const secret = process.env.JWT_SECRET || 'tedx_super_secret_jwt_key_2026_change_in_production';
+      // Vigencia de 24 horas acordada para cubrir jornadas completas de evento
       const token = jwt.sign(
         { id: user.id, email: user.email, role: user.role },
         secret,
-        { expiresIn: '7d' }
+        { expiresIn: '24h' }
       );
 
       return res.json({

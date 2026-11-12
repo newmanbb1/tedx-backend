@@ -14,14 +14,14 @@ const storage = multer.diskStorage({
   filename: (_req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `comprobante-${uniqueSuffix}${ext}`);
+    cb(null, `file-${uniqueSuffix}${ext}`);
   },
 });
 
 export const uploadReceiptMiddleware = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024,
+    fileSize: 15 * 1024 * 1024,
   },
   fileFilter: (_req, file, cb) => {
     const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
@@ -33,3 +33,4 @@ export const uploadReceiptMiddleware = multer({
   },
 });
 
+export const uploadMediaMiddleware = uploadReceiptMiddleware;

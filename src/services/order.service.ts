@@ -1,4 +1,4 @@
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus, PaymentMethod } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import { QRService } from './qr.service.js';
 import { EmailService } from './email.service.js';
@@ -136,6 +136,7 @@ export class OrderService {
           buyerDocumentId: input.buyerDocumentId,
           totalAmount,
           status: OrderStatus.PENDING_PAYMENT,
+          paymentMethod: PaymentMethod.TRANSFER,
           expiresAt,
           orderItems: {
             create: orderItemsData,
@@ -166,6 +167,177 @@ export class OrderService {
           },
         });
         tickets.push(ticket);
+      }
+
+      return {
+        ...order,
+        tickets,
+      };
+    });
+  }
+
+  static async createVolunteerOrder(params: {
+    input: CreateOrderInput;
+    paymentMethod: PaymentMethod;
+    volunteerUserId: string;
+    receiptUrl?: string;
+    referenceNumber?: string;
+  }) {
+    const { input, paymentMethod, volunteerUserId, receiptUrl, referenceNumber } = params;
+
+    if (!input.attendees || input.attendees.length === 0) {
+      throw new Error('Debes incluir al menos un asistente en la orden');
+    }
+
+    const countsByType: Record<string, number> = {};
+    for (const a of input.attendees) {
+      countsByType[a.ticketTypeId] = (countsByType[a.ticketTypeId] || 0) + 1;
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      let totalAmount = 0;
+      const orderItemsData = [];
+
+      for (const [ticketTypeId, qty] of Object.entries(countsByType)) {
+        const ticketType = await tx.ticketType.findUnique({
+          where: { id: ticketTypeId },
+        });
+
+        if (!ticketType || !ticketType.isActive) {
+          throw new Error(`La categoría de boleto seleccionada no está disponible`);
+        }
+
+        if (ticketType.remainingQuota < qty) {
+          throw new Error(
+            `No hay cupos suficientes para ${ticketType.name} (Disponibles: ${ticketType.remainingQuota}, solicitados: ${qty})`
+          );
+        }
+
+        await tx.ticketType.update({
+          where: { id: ticketTypeId },
+          data: {
+            remainingQuota: { decrement: qty },
+          },
+        });
+
+        const subtotal = ticketType.price * qty;
+        totalAmount += subtotal;
+
+        orderItemsData.push({
+          ticketTypeId,
+          quantity: qty,
+          unitPrice: ticketType.price,
+          subtotal,
+        });
+      }
+
+      let orderNumber = this.generateOrderNumber();
+      let exists = await tx.order.findUnique({ where: { orderNumber } });
+      while (exists) {
+        orderNumber = this.generateOrderNumber();
+        exists = await tx.order.findUnique({ where: { orderNumber } });
+      }
+
+      const isCash = paymentMethod === PaymentMethod.CASH;
+      const initialStatus = isCash ? OrderStatus.APPROVED : OrderStatus.PAYMENT_SUBMITTED;
+      const expiresAt = new Date(Date.now() + (isCash ? 365 * 24 * 60 * 60 * 1000 : 2 * 60 * 60 * 1000));
+
+      const order = await tx.order.create({
+        data: {
+          orderNumber,
+          eventId: input.eventId,
+          buyerName: input.buyerName,
+          buyerEmail: input.buyerEmail,
+          buyerPhone: input.buyerPhone,
+          buyerDocumentId: input.buyerDocumentId,
+          totalAmount,
+          status: initialStatus,
+          paymentMethod,
+          collectedById: isCash ? volunteerUserId : null,
+          proofReceiptUrl: receiptUrl || null,
+          proofReferenceNumber: referenceNumber || null,
+          adminNotes: isCash
+            ? `Inscripción presencial en efectivo cobrada por voluntario (ID: ${volunteerUserId}). Aprobada de inmediato.`
+            : `Inscripción cargada por voluntario (ID: ${volunteerUserId}) con transferencia pendiente de validación.`,
+          expiresAt,
+          orderItems: {
+            create: orderItemsData,
+          },
+        },
+        include: {
+          orderItems: {
+            include: { ticketType: true },
+          },
+          event: true,
+        },
+      });
+
+      const tickets = [];
+      const emailTicketsData = [];
+
+      for (let i = 0; i < input.attendees.length; i++) {
+        const attendee = input.attendees[i];
+        const ticketCode = this.generateTicketCode(orderNumber, i);
+
+        let qrPayload = '';
+        let qrDataUrl = '';
+        if (isCash) {
+          qrPayload = QRService.createPayload({
+            ticketCode,
+            orderNumber,
+            attendeeName: attendee.attendeeName,
+            attendeeDocumentId: attendee.attendeeDocumentId,
+            eventName: order.event.title,
+          });
+          qrDataUrl = await QRService.generateQRCodeDataUrl(qrPayload);
+        }
+
+        const ticket = await tx.ticket.create({
+          data: {
+            ticketCode,
+            orderId: order.id,
+            ticketTypeId: attendee.ticketTypeId,
+            attendeeName: attendee.attendeeName,
+            attendeeEmail: attendee.attendeeEmail,
+            attendeeDocumentId: attendee.attendeeDocumentId,
+            qrCodeData: qrPayload,
+          },
+          include: {
+            ticketType: true,
+          },
+        });
+        tickets.push(ticket);
+
+        if (isCash) {
+          emailTicketsData.push({
+            ticketCode: ticket.ticketCode,
+            ticketType: ticket.ticketType.name,
+            attendeeName: ticket.attendeeName,
+            attendeeDocumentId: ticket.attendeeDocumentId,
+            qrDataUrl,
+          });
+        }
+      }
+
+      if (isCash && emailTicketsData.length > 0) {
+        const eventDateFormatted = new Date(order.event.date).toLocaleDateString('es-ES', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+
+        EmailService.sendApprovedTickets({
+          to: order.buyerEmail,
+          buyerName: order.buyerName,
+          orderNumber: order.orderNumber,
+          eventTitle: order.event.title,
+          eventDate: eventDateFormatted,
+          eventVenue: `${order.event.venue}, ${order.event.location}`,
+          tickets: emailTicketsData,
+        }).catch((err) => console.warn('[OrderService] Error enviando correo de tickets en efectivo:', err.message));
       }
 
       return {
@@ -212,7 +384,7 @@ export class OrderService {
     return updated;
   }
 
-  static async approveOrder(orderId: string, adminNotes?: string) {
+  static async approveOrder(orderId: string, adminNotes?: string, reviewerUserId?: string) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -265,12 +437,19 @@ export class OrderService {
       data: {
         status: OrderStatus.APPROVED,
         adminNotes: adminNotes || order.adminNotes,
+        reviewedById: reviewerUserId || order.reviewedById,
+        reviewedAt: new Date(),
+        lockedById: null,
+        lockedAt: null,
       },
       include: {
         tickets: {
           include: { ticketType: true },
         },
         event: true,
+        reviewedBy: {
+          select: { id: true, name: true, email: true },
+        },
       },
     });
 
@@ -283,7 +462,7 @@ export class OrderService {
       minute: '2-digit',
     });
 
-    await EmailService.sendApprovedTickets({
+    EmailService.sendApprovedTickets({
       to: order.buyerEmail,
       buyerName: order.buyerName,
       orderNumber: order.orderNumber,
@@ -291,12 +470,12 @@ export class OrderService {
       eventDate: eventDateFormatted,
       eventVenue: `${order.event.venue}, ${order.event.location}`,
       tickets: emailTicketsData,
-    });
+    }).catch((err) => console.warn('[OrderService] Error enviando email de aprobación:', err.message));
 
     return updatedOrder;
   }
 
-  static async rejectOrder(orderId: string, reason: string) {
+  static async rejectOrder(orderId: string, reason: string, reviewerUserId?: string) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -329,9 +508,55 @@ export class OrderService {
         data: {
           status: OrderStatus.REJECTED,
           adminNotes: reason || 'Comprobante no válido o pago no identificado en la cuenta bancaria.',
+          reviewedById: reviewerUserId || null,
+          reviewedAt: new Date(),
+          lockedById: null,
+          lockedAt: null,
+        },
+        include: {
+          reviewedBy: {
+            select: { id: true, name: true, email: true },
+          },
         },
       });
     });
   }
-}
 
+  static async lookupByCarnet(carnet: string) {
+    const cleanCarnet = carnet.trim();
+    if (!cleanCarnet) return [];
+
+    const orders = await prisma.order.findMany({
+      where: {
+        OR: [
+          { buyerDocumentId: { equals: cleanCarnet, mode: 'insensitive' } },
+          {
+            tickets: {
+              some: {
+                attendeeDocumentId: { equals: cleanCarnet, mode: 'insensitive' },
+              },
+            },
+          },
+        ],
+      },
+      include: {
+        tickets: {
+          include: { ticketType: true },
+        },
+        event: true,
+        reviewedBy: {
+          select: { id: true, name: true, email: true },
+        },
+        lockedBy: {
+          select: { id: true, name: true, email: true },
+        },
+        collectedBy: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return orders;
+  }
+}

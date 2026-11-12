@@ -12,6 +12,7 @@ router.get('/orders', AdminController.getOrders);
 router.post('/orders/:id/approve', AdminController.approveOrder);
 router.post('/orders/:id/reject', AdminController.rejectOrder);
 router.put('/payment-settings/:id', AdminController.updatePaymentSettings);
+router.put('/ticket-types/:id', AdminController.updateTicketType);
 
 export default router;
 

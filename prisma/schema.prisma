@@ -9,7 +9,15 @@ generator client {
 
 enum Role {
   ADMIN
+  VALIDATOR
+  VOLUNTEER
+  CHECKIN
   STAFF
+}
+
+enum PaymentMethod {
+  TRANSFER
+  CASH
 }
 
 enum OrderStatus {
@@ -20,33 +28,90 @@ enum OrderStatus {
   CANCELLED
 }
 
+enum CertificateCategory {
+  ATTENDEE
+  SPEAKER
+  VOLUNTEER
+  VIP
+}
+
 model User {
-  id             String    @id @default(uuid())
-  email          String    @unique
-  passwordHash   String
-  name           String
-  role           Role      @default(STAFF)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  ticketsChecked Ticket[]  @relation("StaffCheckIn")
+  id              String    @id @default(uuid())
+  email           String    @unique
+  passwordHash    String
+  name            String
+  role            Role      @default(STAFF)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  ticketsChecked  Ticket[]  @relation("StaffCheckIn")
+  ordersReviewed  Order[]   @relation("ValidatorOrders")
+  ordersLocked    Order[]   @relation("ValidatorLocks")
+  ordersCollected Order[]   @relation("VolunteerCashOrders")
 }
 
 model Event {
-  id          String       @id @default(uuid())
-  title       String
-  slug        String       @unique
-  subtitle    String?
-  description String
-  date        DateTime
-  location    String
-  venue       String
-  bannerUrl   String?
-  isActive    Boolean      @default(true)
-  maxCapacity Int
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  ticketTypes TicketType[]
-  orders      Order[]
+  id                   String                @id @default(uuid())
+  title                String
+  slug                 String                @unique
+  subtitle             String?
+  description          String
+  date                 DateTime
+  location             String
+  venue                String
+  bannerUrl            String?
+  isActive             Boolean               @default(true)
+  maxCapacity          Int
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  ticketTypes          TicketType[]
+  orders               Order[]
+  speakers             Speaker[]
+  certificateTemplates CertificateTemplate[]
+  certificates         Certificate[]
+}
+
+model Speaker {
+  id        String   @id @default(uuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name      String
+  role      String
+  topic     String
+  bio       String?
+  imageUrl  String
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CertificateTemplate {
+  id                 String              @id @default(uuid())
+  eventId            String
+  event              Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  category           CertificateCategory @unique
+  title              String
+  description        String?
+  backgroundImageUrl String
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+}
+
+model Certificate {
+  id                  String              @id @default(uuid())
+  certificateCode     String              @unique
+  eventId             String
+  event               Event               @relation(fields: [eventId], references: [id])
+  category            CertificateCategory @default(ATTENDEE)
+  recipientName       String
+  recipientDocumentId String
+  ticketId            String?             @unique
+  ticket              Ticket?             @relation(fields: [ticketId], references: [id])
+  qrCodeData          String
+  issuedAt            DateTime            @default(now())
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 }
 
 model TicketType {
@@ -81,22 +146,33 @@ model PaymentSetting {
 }
 
 model Order {
-  id                   String      @id @default(uuid())
-  orderNumber          String      @unique
+  id                   String        @id @default(uuid())
+  orderNumber          String        @unique
   eventId              String
-  event                Event       @relation(fields: [eventId], references: [id])
+  event                Event         @relation(fields: [eventId], references: [id])
   buyerName            String
   buyerEmail           String
   buyerPhone           String
   buyerDocumentId      String
   totalAmount          Float
-  status               OrderStatus @default(PENDING_PAYMENT)
+  status               OrderStatus   @default(PENDING_PAYMENT)
+  paymentMethod        PaymentMethod @default(TRANSFER)
   proofReceiptUrl      String?
   proofReferenceNumber String?
   adminNotes           String?
+  lockedById           String?
+  lockedBy             User?         @relation("ValidatorLocks", fields: [lockedById], references: [id])
+  lockedAt             DateTime?
+  reviewedById         String?
+  reviewedBy           User?         @relation("ValidatorOrders", fields: [reviewedById], references: [id])
+  reviewedAt           DateTime?
+  collectedById        String?
+  collectedBy          User?         @relation("VolunteerCashOrders", fields: [collectedById], references: [id])
+  whatsappSentAt       DateTime?
+  whatsappSentCount    Int           @default(0)
   expiresAt            DateTime
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
   orderItems           OrderItem[]
   tickets              Ticket[]
 }
@@ -113,21 +189,23 @@ model OrderItem {
 }
 
 model Ticket {
-  id                 String     @id @default(uuid())
-  ticketCode         String     @unique
+  id                 String       @id @default(uuid())
+  ticketCode         String       @unique
   orderId            String
-  order              Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order              Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   ticketTypeId       String
-  ticketType         TicketType @relation(fields: [ticketTypeId], references: [id])
+  ticketType         TicketType   @relation(fields: [ticketTypeId], references: [id])
   attendeeName       String
   attendeeEmail      String
   attendeeDocumentId String
   qrCodeData         String
-  isCheckedIn        Boolean    @default(false)
+  isCheckedIn        Boolean      @default(false)
   checkedInAt        DateTime?
   checkedInById      String?
-  checkedInBy        User?      @relation("StaffCheckIn", fields: [checkedInById], references: [id])
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  checkedInBy        User?        @relation("StaffCheckIn", fields: [checkedInById], references: [id])
+  whatsappSentAt     DateTime?
+  whatsappSentCount  Int          @default(0)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  certificate        Certificate?
 }
-
