@@ -6,14 +6,14 @@ import { EmailService } from './email.service.js';
 export interface CreateOrderItemInput {
   ticketTypeId: string;
   attendeeName: string;
-  attendeeEmail: string;
+  attendeeEmail?: string | null;
   attendeeDocumentId: string;
 }
 
 export interface CreateOrderInput {
   eventId: string;
   buyerName: string;
-  buyerEmail: string;
+  buyerEmail?: string | null;
   buyerPhone: string;
   buyerDocumentId: string;
   attendees: CreateOrderItemInput[];
@@ -131,7 +131,7 @@ export class OrderService {
           orderNumber,
           eventId: input.eventId,
           buyerName: input.buyerName,
-          buyerEmail: input.buyerEmail,
+          buyerEmail: input.buyerEmail || null,
           buyerPhone: input.buyerPhone,
           buyerDocumentId: input.buyerDocumentId,
           totalAmount,
@@ -161,7 +161,7 @@ export class OrderService {
             orderId: order.id,
             ticketTypeId: attendee.ticketTypeId,
             attendeeName: attendee.attendeeName,
-            attendeeEmail: attendee.attendeeEmail,
+            attendeeEmail: attendee.attendeeEmail || null,
             attendeeDocumentId: attendee.attendeeDocumentId,
             qrCodeData: '',
           },
@@ -247,7 +247,7 @@ export class OrderService {
           orderNumber,
           eventId: input.eventId,
           buyerName: input.buyerName,
-          buyerEmail: input.buyerEmail,
+          buyerEmail: input.buyerEmail || null,
           buyerPhone: input.buyerPhone,
           buyerDocumentId: input.buyerDocumentId,
           totalAmount,
@@ -298,7 +298,7 @@ export class OrderService {
             orderId: order.id,
             ticketTypeId: attendee.ticketTypeId,
             attendeeName: attendee.attendeeName,
-            attendeeEmail: attendee.attendeeEmail,
+            attendeeEmail: attendee.attendeeEmail || null,
             attendeeDocumentId: attendee.attendeeDocumentId,
             qrCodeData: qrPayload,
           },
@@ -319,7 +319,7 @@ export class OrderService {
         }
       }
 
-      if (isCash && emailTicketsData.length > 0) {
+      if (isCash && order.buyerEmail && emailTicketsData.length > 0) {
         const eventDateFormatted = new Date(order.event.date).toLocaleDateString('es-ES', {
           weekday: 'long',
           year: 'numeric',
@@ -462,15 +462,17 @@ export class OrderService {
       minute: '2-digit',
     });
 
-    EmailService.sendApprovedTickets({
-      to: order.buyerEmail,
-      buyerName: order.buyerName,
-      orderNumber: order.orderNumber,
-      eventTitle: order.event.title,
-      eventDate: eventDateFormatted,
-      eventVenue: `${order.event.venue}, ${order.event.location}`,
-      tickets: emailTicketsData,
-    }).catch((err) => console.warn('[OrderService] Error enviando email de aprobación:', err.message));
+    if (order.buyerEmail) {
+      EmailService.sendApprovedTickets({
+        to: order.buyerEmail,
+        buyerName: order.buyerName,
+        orderNumber: order.orderNumber,
+        eventTitle: order.event.title,
+        eventDate: eventDateFormatted,
+        eventVenue: `${order.event.venue}, ${order.event.location}`,
+        tickets: emailTicketsData,
+      }).catch((err) => console.warn('[OrderService] Error enviando email de aprobación:', err.message));
+    }
 
     return updatedOrder;
   }

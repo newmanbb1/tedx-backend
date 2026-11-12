@@ -70,17 +70,17 @@ export class WhatsAppService {
 
     const ticketUrl = `${clientUrl}/?ticket=${encodeURIComponent(ticket.ticketCode)}`;
 
-    return `🎟️ *¡Hola, ${ticket.attendeeName}!*
+    return `*¡Hola, ${ticket.attendeeName}!*
 
 Tu entrada para *${event.title}* ha sido validada y confirmada exitosamente.
 
-🗓️ *Fecha:* ${eventDate}
-📍 *Lugar:* ${event.venue}, ${event.location}
-🏷️ *Categoría:* ${ticket.ticketType.name}
-🪪 *Documento:* ${ticket.attendeeDocumentId}
-🔑 *Código de Boleto:* ${ticket.ticketCode}
+*Fecha:* ${eventDate}
+*Lugar:* ${event.venue}, ${event.location}
+*Categoría:* ${ticket.ticketType.name}
+*Documento:* ${ticket.attendeeDocumentId}
+*Código de Boleto:* ${ticket.ticketCode}
 
-📲 *Ver tu Credencial Digital con Código QR:*
+*Ver tu Credencial Digital con Código QR:*
 ${ticketUrl}
 
 _Presenta el código QR adjunto en la puerta de ingreso para tu acreditación rápida._ ¡Nos vemos en TEDx!`;

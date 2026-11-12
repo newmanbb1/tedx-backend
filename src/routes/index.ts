@@ -8,6 +8,8 @@ import validatorRoutes from './validator.routes.js';
 import volunteerRoutes from './volunteer.routes.js';
 import speakerRoutes from './speaker.routes.js';
 import certificateRoutes from './certificate.routes.js';
+import sponsorRoutes from './sponsor.routes.js';
+import backgroundRoutes from './background.routes.js';
 
 const router = Router();
 
@@ -20,5 +22,7 @@ router.use('/validator', validatorRoutes);
 router.use('/volunteer', volunteerRoutes);
 router.use('/speakers', speakerRoutes);
 router.use('/certificates', certificateRoutes);
+router.use('/sponsors', sponsorRoutes);
+router.use('/backgrounds', backgroundRoutes);
 
 export default router;

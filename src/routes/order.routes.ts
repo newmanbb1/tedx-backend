@@ -7,6 +7,8 @@ const router = Router();
 
 router.post('/checkout', checkoutLimiter, OrderController.create);
 router.post('/upload-receipt', uploadReceiptMiddleware.single('receipt'), OrderController.uploadReceipt);
+router.post('/report-whatsapp', OrderController.reportWhatsAppReceipt);
+router.put('/:idOrNumber/attendees', OrderController.updateAttendees);
 router.get('/status/:idOrNumber', OrderController.getStatus);
 router.get('/ticket/:code', OrderController.getTicket);
 

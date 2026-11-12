@@ -49,6 +49,32 @@ model User {
   ordersCollected Order[]   @relation("VolunteerCashOrders")
 }
 
+model BackgroundImage {
+  id        String   @id @default(uuid())
+  eventId   String?
+  event     Event?   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  imageUrl  String
+  title     String?
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Sponsor {
+  id         String   @id @default(uuid())
+  eventId    String?
+  event      Event?   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name       String
+  logoUrl    String
+  websiteUrl String?
+  tier       String   @default("Oficial")
+  order      Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 model Event {
   id                   String                @id @default(uuid())
   title                String
@@ -68,6 +94,8 @@ model Event {
   speakers             Speaker[]
   certificateTemplates CertificateTemplate[]
   certificates         Certificate[]
+  sponsors             Sponsor[]
+  backgroundImages     BackgroundImage[]
 }
 
 model Speaker {
@@ -133,16 +161,18 @@ model TicketType {
 }
 
 model PaymentSetting {
-  id            String   @id @default(uuid())
-  bankName      String
-  accountType   String
-  accountNumber String
-  accountHolder String
-  holderId      String
-  instructions  String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                    String   @id @default(uuid())
+  bankName              String?
+  accountType           String?
+  accountNumber         String?
+  accountHolder         String?
+  holderId              String?
+  qrImageUrl            String?
+  whatsappContactNumber String?
+  instructions          String?
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 model Order {
@@ -151,7 +181,7 @@ model Order {
   eventId              String
   event                Event         @relation(fields: [eventId], references: [id])
   buyerName            String
-  buyerEmail           String
+  buyerEmail           String?
   buyerPhone           String
   buyerDocumentId      String
   totalAmount          Float
@@ -196,7 +226,7 @@ model Ticket {
   ticketTypeId       String
   ticketType         TicketType   @relation(fields: [ticketTypeId], references: [id])
   attendeeName       String
-  attendeeEmail      String
+  attendeeEmail      String?
   attendeeDocumentId String
   qrCodeData         String
   isCheckedIn        Boolean      @default(false)

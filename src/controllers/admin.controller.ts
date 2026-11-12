@@ -129,11 +129,41 @@ export class AdminController {
     }
   }
 
+  static async getPaymentSettings(_req: Request, res: Response) {
+    try {
+      let setting = await prisma.paymentSetting.findFirst({
+        where: { isActive: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!setting) {
+        setting = await prisma.paymentSetting.create({
+          data: {
+            instructions: 'Escanea el código QR desde tu app bancaria móvil, transfiere el monto exacto y adjunta tu comprobante.',
+            isActive: true,
+          },
+        });
+      }
+      return res.json({ paymentSetting: setting });
+    } catch (error: any) {
+      console.error('Error al obtener configuración de pago:', error);
+      return res.status(500).json({ error: 'Error al obtener la configuración de pago' });
+    }
+  }
+
   static async updatePaymentSettings(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { bankName, accountType, accountNumber, accountHolder, holderId, instructions, isActive } =
-        req.body;
+      const {
+        bankName,
+        accountType,
+        accountNumber,
+        accountHolder,
+        holderId,
+        instructions,
+        isActive,
+        qrImageUrl,
+        whatsappContactNumber,
+      } = req.body;
 
       const updated = await prisma.paymentSetting.update({
         where: { id },
@@ -145,16 +175,42 @@ export class AdminController {
           holderId,
           instructions,
           isActive,
+          ...(qrImageUrl !== undefined ? { qrImageUrl } : {}),
+          ...(whatsappContactNumber !== undefined ? { whatsappContactNumber } : {}),
         },
       });
 
       return res.json({
-        message: 'Configuración bancaria actualizada',
+        message: 'Configuración de pago actualizada',
         paymentSetting: updated,
       });
     } catch (error: any) {
-      console.error('Error al actualizar datos bancarios:', error);
-      return res.status(400).json({ error: 'No se pudo actualizar la configuración bancaria' });
+      console.error('Error al actualizar configuración de pago:', error);
+      return res.status(400).json({ error: 'No se pudo actualizar la configuración de pago' });
+    }
+  }
+
+  static async uploadPaymentQr(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      if (!req.file) {
+        return res.status(400).json({ error: 'Debes proporcionar una imagen válida para el código QR' });
+      }
+
+      const qrImageUrl = `/uploads/${req.file.filename}`;
+      const updated = await prisma.paymentSetting.update({
+        where: { id },
+        data: { qrImageUrl },
+      });
+
+      return res.json({
+        message: 'Código QR de pago subido correctamente',
+        paymentSetting: updated,
+        qrImageUrl,
+      });
+    } catch (error: any) {
+      console.error('Error al subir QR de pago:', error);
+      return res.status(500).json({ error: 'Error al subir el código QR de pago' });
     }
   }
 
