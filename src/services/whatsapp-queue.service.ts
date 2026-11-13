@@ -62,7 +62,9 @@ export class WhatsAppQueueService {
       `¡Todo listo! Tu registro para *${item.eventName}* está 100% aprobado.`,
     ];
 
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+    const rawUrl = process.env.PUBLIC_APP_URL || process.env.CLIENT_URL || 'https://tedxusfx.tech';
+    const urls = rawUrl.split(',').map((u) => u.trim());
+    const clientUrl = urls.find((u) => u.startsWith('https://')) || urls[0] || 'https://tedxusfx.tech';
     const ticketUrl = `${clientUrl}/?ticket=${encodeURIComponent(item.ticketCode)}`;
     const eventDate = new Date(item.eventDate).toLocaleDateString('es-ES', {
       weekday: 'long',
@@ -91,9 +93,12 @@ ${confirmation}
 📲 *Ver tu Credencial Digital Oficial:*
 ${ticketUrl}
 
-_Presenta el código QR adjunto en la puerta de acreditación para tu ingreso rápido._
+💬 *Confirmación de recepción:*
+Por favor responde con un *"CONFIRMADO"* o *"RECIBIDO"* a este mensaje para registrar la entrega de tu entrada en el sistema oficial y asegurar tu acreditación.
 
-#TEDxInnova2026 • _Verif: ${uniqueRef}_`;
+_Presenta el código QR adjunto en la puerta de acreditación del Teatro Gran Mariscal el día del evento._
+
+#TEDxUSFX2026 • _Ref: ${uniqueRef}_`;
   }
 
   /**

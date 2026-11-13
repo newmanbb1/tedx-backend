@@ -57,7 +57,10 @@ export class WhatsAppService {
   }
 
   static getClientUrl(): string {
-    return process.env.CLIENT_URL || 'http://localhost:5173';
+    const raw = process.env.PUBLIC_APP_URL || process.env.CLIENT_URL || 'https://tedxusfx.tech';
+    const urls = raw.split(',').map((u) => u.trim());
+    const httpsUrl = urls.find((u) => u.startsWith('https://'));
+    return httpsUrl || urls[0] || 'https://tedxusfx.tech';
   }
 
   static generateMessageText(params: SendTicketWhatsAppParams): string {
@@ -84,10 +87,13 @@ Tu entrada para *${event.title}* ha sido validada y confirmada exitosamente.
 *Documento:* ${ticket.attendeeDocumentId}
 *Código de Boleto:* ${ticket.ticketCode}
 
-*Ver tu Credencial Digital con Código QR:*
+*Ver tu Credencial Digital Oficial:*
 ${ticketUrl}
 
-_Presenta el código QR adjunto en la puerta de ingreso para tu acreditación rápida._ ¡Nos vemos en TEDx!`;
+💬 *Confirmación de recepción (Requerida):*
+Por favor responde con un *"CONFIRMADO"* o *"RECIBIDO"* a este mensaje para registrar la entrega de tu entrada en el sistema oficial y asegurar tu acreditación.
+
+_Presenta el código QR adjunto en la puerta de ingreso del Teatro Gran Mariscal para tu acreditación rápida._ ¡Nos vemos en TEDx USFX!`;
   }
 
   static generateWaMeLink(phone: string, text: string): string {

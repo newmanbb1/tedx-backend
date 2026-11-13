@@ -2,6 +2,7 @@ import { OrderStatus, PaymentMethod } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import { QRService } from './qr.service.js';
 import { EmailService } from './email.service.js';
+import { WhatsAppService } from './whatsapp.service.js';
 
 export interface CreateOrderItemInput {
   ticketTypeId: string;
@@ -340,6 +341,24 @@ export class OrderService {
         }).catch((err) => console.warn('[OrderService] Error enviando correo de tickets en efectivo:', err.message));
       }
 
+      if (isCash && order.buyerPhone) {
+        for (const ticket of tickets) {
+          WhatsAppService.sendTicket({
+            phone: order.buyerPhone,
+            ticket: {
+              id: ticket.id,
+              ticketCode: ticket.ticketCode,
+              attendeeName: ticket.attendeeName,
+              attendeeDocumentId: ticket.attendeeDocumentId,
+              qrCodeData: ticket.qrCodeData || undefined,
+              ticketType: { name: ticket.ticketType.name },
+            },
+            event: order.event,
+            orderNumber: order.orderNumber,
+          }).catch((err) => console.warn('[OrderService] Error encolando WhatsApp en venta presencial:', err.message));
+        }
+      }
+
       return {
         ...order,
         tickets,
@@ -472,6 +491,27 @@ export class OrderService {
         eventVenue: `${order.event.venue}, ${order.event.location}`,
         tickets: emailTicketsData,
       }).catch((err) => console.warn('[OrderService] Error enviando email de aprobación:', err.message));
+    }
+
+    if (order.buyerPhone) {
+      const ticketsToSend = updatedOrder.tickets || order.tickets;
+      for (const ticket of ticketsToSend) {
+        WhatsAppService.sendTicket({
+          phone: order.buyerPhone,
+          ticket: {
+            id: ticket.id,
+            ticketCode: ticket.ticketCode,
+            attendeeName: ticket.attendeeName,
+            attendeeDocumentId: ticket.attendeeDocumentId,
+            qrCodeData: ticket.qrCodeData || undefined,
+            ticketType: { name: ticket.ticketType.name },
+          },
+          event: order.event,
+          orderNumber: order.orderNumber,
+        })
+          .then((res) => console.log(`[OrderService] Boleto ${ticket.ticketCode} encolado para WhatsApp a ${order.buyerPhone}:`, res.message))
+          .catch((err) => console.warn(`[OrderService] Error encolando ticket ${ticket.ticketCode} para WhatsApp:`, err.message));
+      }
     }
 
     return updatedOrder;
