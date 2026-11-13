@@ -129,6 +129,58 @@ export class AdminController {
     }
   }
 
+  static async deleteOrder(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      const order = await prisma.order.findUnique({
+        where: { id },
+        include: {
+          tickets: true,
+          orderItems: true,
+        },
+      });
+
+      if (!order) {
+        return res.status(404).json({ error: 'Orden no encontrada' });
+      }
+
+      // Si la orden no estaba rechazada ni cancelada, reponer los cupos consumidos
+      if (order.status !== 'REJECTED' && order.status !== 'CANCELLED') {
+        for (const item of order.orderItems) {
+          await prisma.ticketType.update({
+            where: { id: item.ticketTypeId },
+            data: { remainingQuota: { increment: item.quantity } },
+          });
+        }
+      }
+
+      // Eliminar certificados vinculados a los boletos de esta orden
+      const ticketIds = order.tickets.map((t) => t.id);
+      if (ticketIds.length > 0) {
+        await prisma.certificate.deleteMany({
+          where: { ticketId: { in: ticketIds } },
+        });
+      }
+
+      // Eliminar boletos
+      await prisma.ticket.deleteMany({ where: { orderId: order.id } });
+
+      // Eliminar items de orden
+      await prisma.orderItem.deleteMany({ where: { orderId: order.id } });
+
+      // Eliminar la orden
+      await prisma.order.delete({ where: { id: order.id } });
+
+      return res.json({
+        message: `Orden #${order.orderNumber} eliminada correctamente.`,
+      });
+    } catch (error: any) {
+      console.error('Error al eliminar orden:', error);
+      return res.status(500).json({ error: 'No se pudo eliminar la orden' });
+    }
+  }
+
   static async getPaymentSettings(_req: Request, res: Response) {
     try {
       let setting = await prisma.paymentSetting.findFirst({
