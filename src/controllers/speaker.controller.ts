@@ -45,8 +45,8 @@ export class SpeakerController {
     try {
       const { name, role, topic, bio, order = 0, eventId } = req.body;
 
-      if (!name || !role || !topic) {
-        return res.status(400).json({ error: 'Nombre, cargo y tema son obligatorios' });
+      if (!name || !name.trim()) {
+        return res.status(400).json({ error: 'El nombre del orador es obligatorio' });
       }
 
       let imageUrl = req.body.imageUrl || '';
@@ -68,12 +68,15 @@ export class SpeakerController {
         return res.status(400).json({ error: 'No se encontró un evento activo al cual asignar el orador' });
       }
 
+      const finalRole = (role && role.trim()) ? role.trim() : 'Speaker Oficial';
+      const finalTopic = (topic && topic.trim()) ? topic.trim() : 'TEDx USFX';
+
       const speaker = await prisma.speaker.create({
         data: {
           eventId: targetEventId,
           name: name.trim(),
-          role: role.trim(),
-          topic: topic.trim(),
+          role: finalRole,
+          topic: finalTopic,
           bio: bio?.trim() || null,
           imageUrl,
           order: Number(order) || 0,
@@ -109,8 +112,8 @@ export class SpeakerController {
         where: { id },
         data: {
           name: name !== undefined ? name.trim() : speaker.name,
-          role: role !== undefined ? role.trim() : speaker.role,
-          topic: topic !== undefined ? topic.trim() : speaker.topic,
+          role: role !== undefined ? (role.trim() || 'Speaker Oficial') : speaker.role,
+          topic: topic !== undefined ? (topic.trim() || 'TEDx USFX') : speaker.topic,
           bio: bio !== undefined ? (bio ? bio.trim() : null) : speaker.bio,
           imageUrl,
           order: order !== undefined ? Number(order) : speaker.order,
