@@ -5,8 +5,8 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Enable pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Enable pnpm 9 (matches lockfile 9.0)
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
 # Copy package manifests and Prisma schema
 COPY package.json pnpm-lock.yaml ./
