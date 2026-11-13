@@ -6,9 +6,9 @@ const prisma = new PrismaClient();
 async function main() {
   await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "Event", "Sponsor", "Speaker", "Certificate", "CertificateTemplate", "Ticket", "TicketType", "OrderItem", "Order", "PaymentSetting" RESTART IDENTITY CASCADE;');
 
-  const adminPasswordHash = await bcrypt.hash('AdminTedx2026!', 10);
+  const adminPasswordHash = await bcrypt.hash('AdminTedx#129939994', 10);
   await prisma.user.create({
-    data: { email: 'admin@tedx.local', name: 'Admin Principal', passwordHash: adminPasswordHash, role: Role.ADMIN },
+    data: { email: 'admin.tedx@gmail.com', name: 'Director TEDx USFX', passwordHash: adminPasswordHash, role: Role.ADMIN },
   });
 
   const event = await prisma.event.create({
