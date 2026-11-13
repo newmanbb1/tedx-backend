@@ -1,3 +1,4 @@
+import QRCode from 'qrcode';
 import { QRService } from './qr.service.js';
 import { WhatsAppQueueService } from './whatsapp-queue.service.js';
 
@@ -236,6 +237,60 @@ _Presenta el código QR adjunto en la puerta de ingreso para tu acreditación r�
   }
 
   /**
+   * Asegura que la instancia exista en Evolution API.
+   * Si no existe o fue eliminada, la recrea automáticamente con integración Baileys y soporte QR.
+   */
+  static async ensureInstance(): Promise<void> {
+    const { apiUrl, apiKey, instanceName } = this.getConfig();
+
+    try {
+      const stateRes = await fetch(`${apiUrl}/instance/connectionState/${instanceName}`, {
+        headers: { apikey: apiKey },
+      });
+
+      if (stateRes.ok) {
+        return; // La instancia ya existe
+      }
+
+      // Verificar lista completa de instancias
+      const fetchRes = await fetch(`${apiUrl}/instance/fetchInstances`, {
+        headers: { apikey: apiKey },
+      });
+      if (fetchRes.ok) {
+        const list = (await fetchRes.json().catch(() => [])) as any[];
+        if (list.some((inst) => inst.name === instanceName)) {
+          return;
+        }
+      }
+
+      // Si no existe, crear la instancia
+      console.log(`[WhatsAppService] Creando instancia "${instanceName}" en Evolution API...`);
+      const createRes = await fetch(`${apiUrl}/instance/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: apiKey,
+        },
+        body: JSON.stringify({
+          instanceName,
+          qrcode: true,
+          integration: 'WHATSAPP-BAILEYS',
+        }),
+      });
+
+      if (!createRes.ok) {
+        const errJson = await createRes.json().catch(() => ({}));
+        if (JSON.stringify(errJson).includes('already in use')) {
+          return;
+        }
+        console.warn('[WhatsAppService] Aviso creando instancia en Evolution API:', errJson);
+      }
+    } catch (err: any) {
+      console.warn('[WhatsAppService] Error en ensureInstance:', err.message);
+    }
+  }
+
+  /**
    * Consulta el estado de la conexión y datos del perfil vinculado en Evolution API
    */
   static async getInstanceStatus(): Promise<{
@@ -322,40 +377,71 @@ _Presenta el código QR adjunto en la puerta de ingreso para tu acreditación r�
   }> {
     const { apiUrl, apiKey, instanceName } = this.getConfig();
 
-    let response = await fetch(`${apiUrl}/instance/connect/${instanceName}`, {
-      headers: { apikey: apiKey },
-    });
+    // Asegurar que la instancia exista primero
+    await this.ensureInstance();
 
-    // Si falló (ej. socket cerrado tras expiración del QR anterior), forzar autoreinicio limpio
-    if (!response.ok) {
-      try {
-        await this.restartInstance();
+    let lastData: any = {};
+
+    // Reintentar hasta 4 veces con pausas de 1.2s para esperar que Baileys emita el handshake con QR
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      let response = await fetch(`${apiUrl}/instance/connect/${instanceName}`, {
+        headers: { apikey: apiKey },
+      });
+
+      // Si falló (ej. socket cerrado tras expiración del QR anterior), forzar autoreinicio limpio en el 1er intento
+      if (!response.ok && attempt === 1) {
+        try {
+          await this.restartInstance();
+          await new Promise((r) => setTimeout(r, 1200));
+          response = await fetch(`${apiUrl}/instance/connect/${instanceName}`, {
+            headers: { apikey: apiKey },
+          });
+        } catch (restartErr) {
+          console.warn('[WhatsAppService] Falló autoreinicio de instancia para QR:', restartErr);
+        }
+      }
+
+      if (response.ok) {
+        const data: any = await response.json().catch(() => ({}));
+        lastData = data;
+
+        // Si tenemos code de WhatsApp pero Evolution no generó base64, generarlo directamente con qrcode
+        if (!data.base64 && data.code) {
+          try {
+            data.base64 = await QRCode.toDataURL(data.code, { margin: 2, scale: 8 });
+          } catch (qrErr) {
+            console.warn('[WhatsAppService] Error convirtiendo raw code a base64:', qrErr);
+          }
+        }
+
+        // Si ya tenemos el QR en base64 listo, retornarlo inmediatamente
+        if (data.base64) {
+          // Si Baileys ya acumuló más de 6 reintentos de QR, programar reinicio preventivo para el próximo ciclo
+          if (typeof data.count === 'number' && data.count >= 7) {
+            setTimeout(async () => {
+              try {
+                await this.restartInstance();
+              } catch {}
+            }, 500);
+          }
+          return data;
+        }
+      }
+
+      // Si aún no hay QR base64 listo (ej. count: 0 Baileys conectando), esperar antes del próximo reintento
+      if (attempt < 4) {
         await new Promise((r) => setTimeout(r, 1200));
-        response = await fetch(`${apiUrl}/instance/connect/${instanceName}`, {
-          headers: { apikey: apiKey },
-        });
-      } catch (restartErr) {
-        console.warn('[WhatsAppService] Falló autoreinicio de instancia para QR:', restartErr);
       }
     }
 
-    if (!response.ok) {
-      const err: any = await response.json().catch(() => ({}));
-      throw new Error(err.message || 'Error al obtener código QR de Evolution API');
+    // Fallback final: si hay code pero no base64
+    if (!lastData.base64 && lastData.code) {
+      try {
+        lastData.base64 = await QRCode.toDataURL(lastData.code, { margin: 2, scale: 8 });
+      } catch {}
     }
 
-    const data: any = await response.json().catch(() => ({}));
-
-    // Si Baileys ya acumuló más de 6 reintentos de QR, programar reinicio preventivo para el próximo ciclo
-    if (typeof data.count === 'number' && data.count >= 7) {
-      setTimeout(async () => {
-        try {
-          await this.restartInstance();
-        } catch {}
-      }, 500);
-    }
-
-    return data;
+    return lastData;
   }
 
   /**
@@ -369,6 +455,9 @@ _Presenta el código QR adjunto en la puerta de ingreso para tu acreditación r�
   }> {
     const { apiUrl, apiKey, instanceName } = this.getConfig();
     const formatted = this.formatPhoneNumber(phone);
+
+    // Asegurar que la instancia exista
+    await this.ensureInstance();
 
     const response = await fetch(`${apiUrl}/instance/connect/${instanceName}?number=${formatted}`, {
       headers: { apikey: apiKey },
@@ -388,7 +477,7 @@ _Presenta el código QR adjunto en la puerta de ingreso para tu acreditación r�
     }
 
     return {
-      pairingCode: data.pairingCode || 'CÓDIGO-NO-DISPONIBLE',
+      pairingCode: data.pairingCode || data.code || 'CÓDIGO-NO-DISPONIBLE',
       code: data.code,
       state: data.instance?.state || 'connecting',
     };
