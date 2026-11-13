@@ -22,6 +22,12 @@ router.post('/ticket-types', AdminController.createTicketType);
 router.put('/ticket-types/:id', AdminController.updateTicketType);
 router.delete('/ticket-types/:id', AdminController.deleteTicketType);
 
+// Rutas de administración de Usuarios y Roles
+router.get('/users', AdminController.getUsers);
+router.post('/users', AdminController.createUser);
+router.put('/users/:id', AdminController.updateUser);
+router.delete('/users/:id', AdminController.deleteUser);
+
 // Rutas de administración de WhatsApp (Evolution API)
 router.get('/whatsapp/status', WhatsAppAdminController.getStatus);
 router.get('/whatsapp/qr', WhatsAppAdminController.getQR);

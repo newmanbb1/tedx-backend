@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus, Role } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 import { prisma } from '../config/prisma.js';
 import { OrderService } from '../services/order.service.js';
+import { AuthRequest } from '../middlewares/auth.middleware.js';
 
 export class AdminController {
   static async getDashboardStats(_req: Request, res: Response) {
@@ -415,6 +417,227 @@ export class AdminController {
     } catch (error: any) {
       console.error('Error al eliminar categoría de entrada:', error);
       return res.status(500).json({ error: 'No se pudo eliminar la categoría de entrada' });
+    }
+  }
+
+  // ==========================================
+  // GESTIÓN DE USUARIOS Y ROLES DEL SISTEMA
+  // ==========================================
+
+  static async getUsers(_req: Request, res: Response) {
+    try {
+      const users = await prisma.user.findMany({
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: {
+            select: {
+              ordersReviewed: true,
+              ticketsChecked: true,
+              ordersCollected: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return res.json({ users });
+    } catch (error: any) {
+      console.error('Error al obtener lista de usuarios:', error);
+      return res.status(500).json({ error: 'Error al consultar la lista de usuarios' });
+    }
+  }
+
+  static async createUser(req: Request, res: Response) {
+    try {
+      const { name, email, password, role } = req.body;
+
+      if (!name || typeof name !== 'string' || name.trim().length < 2) {
+        return res.status(400).json({ error: 'El nombre completo es requerido (mínimo 2 caracteres)' });
+      }
+
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        return res.status(400).json({ error: 'Debes proporcionar un correo electrónico válido' });
+      }
+
+      if (!password || typeof password !== 'string' || password.length < 6) {
+        return res.status(400).json({ error: 'La contraseña debe contener al menos 6 caracteres' });
+      }
+
+      const validRoles = [Role.ADMIN, Role.VALIDATOR, Role.VOLUNTEER, Role.CHECKIN, Role.STAFF];
+      const assignedRole = role as Role;
+      if (!validRoles.includes(assignedRole)) {
+        return res.status(400).json({ error: 'El rol especificado no es válido en el sistema' });
+      }
+
+      const sanitizedEmail = email.trim().toLowerCase();
+
+      const existing = await prisma.user.findUnique({
+        where: { email: sanitizedEmail },
+      });
+
+      if (existing) {
+        return res.status(409).json({ error: 'Ya existe un usuario registrado con este correo electrónico' });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      const newUser = await prisma.user.create({
+        data: {
+          name: name.trim(),
+          email: sanitizedEmail,
+          passwordHash,
+          role: assignedRole,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          createdAt: true,
+        },
+      });
+
+      return res.status(201).json({
+        message: 'Usuario creado exitosamente',
+        user: newUser,
+      });
+    } catch (error: any) {
+      console.error('Error al crear usuario:', error);
+      return res.status(500).json({ error: 'No se pudo crear el usuario' });
+    }
+  }
+
+  static async updateUser(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { name, email, password, role } = req.body;
+
+      const user = await prisma.user.findUnique({ where: { id } });
+      if (!user) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      const dataToUpdate: any = {};
+
+      if (name && typeof name === 'string' && name.trim().length >= 2) {
+        dataToUpdate.name = name.trim();
+      }
+
+      if (email && typeof email === 'string' && email.includes('@')) {
+        const sanitizedEmail = email.trim().toLowerCase();
+        if (sanitizedEmail !== user.email) {
+          const duplicate = await prisma.user.findUnique({ where: { email: sanitizedEmail } });
+          if (duplicate) {
+            return res.status(409).json({ error: 'El correo electrónico ya está en uso por otro usuario' });
+          }
+          dataToUpdate.email = sanitizedEmail;
+        }
+      }
+
+      if (role) {
+        const validRoles = [Role.ADMIN, Role.VALIDATOR, Role.VOLUNTEER, Role.CHECKIN, Role.STAFF];
+        if (!validRoles.includes(role as Role)) {
+          return res.status(400).json({ error: 'Rol inválido' });
+        }
+
+        // Si se intenta remover rol de ADMIN al usuario actual, verificar que no sea el único
+        const currentUserId = (req as AuthRequest).user?.id;
+        if (user.role === Role.ADMIN && role !== Role.ADMIN) {
+          const adminCount = await prisma.user.count({ where: { role: Role.ADMIN } });
+          if (adminCount <= 1) {
+            return res.status(400).json({
+              error: 'No se puede remover el rol de Administrador al único administrador registrado en la plataforma.',
+            });
+          }
+        }
+
+        dataToUpdate.role = role as Role;
+      }
+
+      if (password && typeof password === 'string' && password.trim().length > 0) {
+        if (password.trim().length < 6) {
+          return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' });
+        }
+        dataToUpdate.passwordHash = await bcrypt.hash(password.trim(), 10);
+      }
+
+      const updated = await prisma.user.update({
+        where: { id },
+        data: dataToUpdate,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          updatedAt: true,
+        },
+      });
+
+      return res.json({
+        message: 'Usuario actualizado exitosamente',
+        user: updated,
+      });
+    } catch (error: any) {
+      console.error('Error al actualizar usuario:', error);
+      return res.status(500).json({ error: 'No se pudo actualizar el usuario' });
+    }
+  }
+
+  static async deleteUser(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const currentUserId = (req as AuthRequest).user?.id;
+
+      if (id === currentUserId) {
+        return res.status(400).json({
+          error: 'No puedes eliminar tu propia cuenta de administrador mientras tienes la sesión activa.',
+        });
+      }
+
+      const target = await prisma.user.findUnique({
+        where: { id },
+        include: {
+          _count: {
+            select: {
+              ordersReviewed: true,
+              ticketsChecked: true,
+              ordersCollected: true,
+            },
+          },
+        },
+      });
+
+      if (!target) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      if (target.role === Role.ADMIN) {
+        const adminCount = await prisma.user.count({ where: { role: Role.ADMIN } });
+        if (adminCount <= 1) {
+          return res.status(400).json({
+            error: 'No se puede eliminar al único administrador del sistema.',
+          });
+        }
+      }
+
+      const count = target._count;
+      if (count.ordersReviewed > 0 || count.ticketsChecked > 0 || count.ordersCollected > 0) {
+        return res.status(400).json({
+          error: `Este usuario tiene registros históricos asociados (${count.ordersReviewed} órdenes validadas, ${count.ordersCollected} cobros registrados y ${count.ticketsChecked} acreditaciones en puerta). Para preservar la trazabilidad fiscal y auditoría, puedes cambiar su contraseña o reasignar su rol.`,
+        });
+      }
+
+      await prisma.user.delete({ where: { id } });
+
+      return res.json({ message: 'Usuario eliminado exitosamente del sistema' });
+    } catch (error: any) {
+      console.error('Error al eliminar usuario:', error);
+      return res.status(500).json({ error: 'No se pudo eliminar el usuario' });
     }
   }
 }
