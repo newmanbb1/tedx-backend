@@ -83,7 +83,12 @@ app.use('/api', generalLimiter);
 app.use('/api', apiRouter);
 
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('Error no controlado:', err);
+  console.error('Error procesando solicitud:', err);
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({
+      error: 'El archivo es demasiado grande (máximo 50MB permitidos). Por favor comprime o reduce el peso de la imagen.',
+    });
+  }
   const status = err.status || 500;
   res.status(status).json({
     error: err.message || 'Error interno del servidor',

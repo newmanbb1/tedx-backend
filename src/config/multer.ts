@@ -21,14 +21,21 @@ const storage = multer.diskStorage({
 export const uploadReceiptMiddleware = multer({
   storage,
   limits: {
-    fileSize: 15 * 1024 * 1024,
+    fileSize: 50 * 1024 * 1024, // 50 MB
   },
   fileFilter: (_req, file, cb) => {
-    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-    if (allowedMimes.includes(file.mimetype)) {
+    const allowedMimes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/svg+xml',
+      'image/gif',
+      'application/pdf',
+    ];
+    if (allowedMimes.includes(file.mimetype) || file.mimetype.startsWith('image/')) {
       cb(null, true);
     } else {
-      cb(new Error('Solo se permiten imágenes (JPEG, PNG, WebP) o archivos PDF'));
+      cb(new Error('Solo se permiten imágenes (JPEG, PNG, WebP, SVG, GIF) o archivos PDF'));
     }
   },
 });
