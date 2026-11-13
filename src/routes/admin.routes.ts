@@ -16,7 +16,9 @@ router.post('/orders/:id/reject', AdminController.rejectOrder);
 router.get('/payment-settings', AdminController.getPaymentSettings);
 router.put('/payment-settings/:id', AdminController.updatePaymentSettings);
 router.post('/payment-settings/:id/qr', uploadMediaMiddleware.single('qrImage'), AdminController.uploadPaymentQr);
+router.post('/ticket-types', AdminController.createTicketType);
 router.put('/ticket-types/:id', AdminController.updateTicketType);
+router.delete('/ticket-types/:id', AdminController.deleteTicketType);
 
 // Rutas de administración de WhatsApp (Evolution API)
 router.get('/whatsapp/status', WhatsAppAdminController.getStatus);

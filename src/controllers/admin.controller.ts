@@ -214,19 +214,83 @@ export class AdminController {
     }
   }
 
+  static async createTicketType(req: Request, res: Response) {
+    try {
+      const { name, description, price, totalQuota, eventId } = req.body;
+
+      if (!name || typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ error: 'El nombre de la categoría es obligatorio' });
+      }
+
+      if (price === undefined || isNaN(Number(price)) || Number(price) < 0) {
+        return res.status(400).json({ error: 'El precio debe ser un número mayor o igual a 0' });
+      }
+
+      if (!totalQuota || isNaN(Number(totalQuota)) || Number(totalQuota) <= 0) {
+        return res.status(400).json({ error: 'El cupo total debe ser un número entero mayor a 0' });
+      }
+
+      let targetEventId = eventId;
+      if (!targetEventId) {
+        const activeEvent = await prisma.event.findFirst({ where: { isActive: true } });
+        if (!activeEvent) {
+          return res.status(404).json({ error: 'No se encontró un evento activo al cual asignar la entrada' });
+        }
+        targetEventId = activeEvent.id;
+      }
+
+      const quota = Math.floor(Number(totalQuota));
+      const ticketPrice = Number(price);
+
+      const created = await prisma.ticketType.create({
+        data: {
+          eventId: targetEventId,
+          name: name.trim(),
+          description: description ? description.trim() : null,
+          price: ticketPrice,
+          totalQuota: quota,
+          remainingQuota: quota,
+          isActive: true,
+        },
+      });
+
+      return res.status(201).json({
+        message: 'Categoría de entrada creada exitosamente',
+        ticketType: created,
+      });
+    } catch (error: any) {
+      console.error('Error al crear categoría de entrada:', error);
+      return res.status(500).json({ error: 'Error interno al crear categoría de entrada' });
+    }
+  }
+
   static async updateTicketType(req: Request, res: Response) {
     try {
       const { id } = req.params;
       const { name, description, price, totalQuota, remainingQuota, isActive } = req.body;
 
+      const existing = await prisma.ticketType.findUnique({ where: { id } });
+      if (!existing) {
+        return res.status(404).json({ error: 'Categoría de entrada no encontrada' });
+      }
+
+      const parsedTotal = totalQuota !== undefined ? Math.floor(Number(totalQuota)) : undefined;
+      let parsedRemaining = remainingQuota !== undefined ? Math.floor(Number(remainingQuota)) : undefined;
+
+      // Si se amplía el cupo total sin especificar remaining, ajustamos la diferencia
+      if (parsedTotal !== undefined && parsedRemaining === undefined) {
+        const diff = parsedTotal - existing.totalQuota;
+        parsedRemaining = Math.max(0, existing.remainingQuota + diff);
+      }
+
       const updated = await prisma.ticketType.update({
         where: { id },
         data: {
-          name,
-          description,
+          name: name ? name.trim() : undefined,
+          description: description !== undefined ? (description ? description.trim() : null) : undefined,
           price: price !== undefined ? Number(price) : undefined,
-          totalQuota: totalQuota !== undefined ? Number(totalQuota) : undefined,
-          remainingQuota: remainingQuota !== undefined ? Number(remainingQuota) : undefined,
+          totalQuota: parsedTotal,
+          remainingQuota: parsedRemaining,
           isActive,
         },
       });
@@ -238,6 +302,41 @@ export class AdminController {
     } catch (error: any) {
       console.error('Error al actualizar categoría de entrada:', error);
       return res.status(400).json({ error: 'No se pudo actualizar la categoría de entrada' });
+    }
+  }
+
+  static async deleteTicketType(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const existing = await prisma.ticketType.findUnique({
+        where: { id },
+        include: { _count: { select: { tickets: true, orderItems: true } } },
+      });
+
+      if (!existing) {
+        return res.status(404).json({ error: 'Categoría de entrada no encontrada' });
+      }
+
+      // Si ya tiene boletos vendidos u órdenes asociadas, desactivamos en vez de borrar para preservar integridad contable
+      if (existing._count.tickets > 0 || existing._count.orderItems > 0) {
+        await prisma.ticketType.update({
+          where: { id },
+          data: { isActive: false, remainingQuota: 0 },
+        });
+        return res.json({
+          message: 'La categoría tiene boletos u órdenes registradas, por lo que fue desactivada de la venta pública',
+          softDeleted: true,
+        });
+      }
+
+      await prisma.ticketType.delete({ where: { id } });
+      return res.json({
+        message: 'Categoría de entrada eliminada exitosamente',
+        softDeleted: false,
+      });
+    } catch (error: any) {
+      console.error('Error al eliminar categoría de entrada:', error);
+      return res.status(500).json({ error: 'No se pudo eliminar la categoría de entrada' });
     }
   }
 }
