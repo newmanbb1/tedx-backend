@@ -13,7 +13,7 @@ async function main() {
 
   const event = await prisma.event.create({
     data: {
-      title: 'TEDx USFX 2026',
+      title: 'TEDx USFX: Fronteras del Pensamiento',
       slug: 'tedx-usfx-2026',
       subtitle: 'Ideas que transforman: Liderazgo, Ciencia y Compromiso Social',
       description: 'Conferencia oficial.',
