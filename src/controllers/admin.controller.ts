@@ -214,20 +214,35 @@ export class AdminController {
     }
   }
 
+  static async getTicketTypes(_req: Request, res: Response) {
+    try {
+      const activeEvent = await prisma.event.findFirst({ where: { isActive: true } });
+      if (!activeEvent) {
+        return res.json({ ticketTypes: [] });
+      }
+
+      const ticketTypes = await prisma.ticketType.findMany({
+        where: { eventId: activeEvent.id },
+        orderBy: [{ price: 'asc' }, { createdAt: 'asc' }],
+      });
+
+      return res.json({ ticketTypes });
+    } catch (error: any) {
+      console.error('Error al listar tipos de boletos:', error);
+      return res.status(500).json({ error: 'Error al listar categorías de entrada' });
+    }
+  }
+
   static async createTicketType(req: Request, res: Response) {
     try {
       const { name, description, price, totalQuota, eventId } = req.body;
 
       if (!name || typeof name !== 'string' || !name.trim()) {
-        return res.status(400).json({ error: 'El nombre de la categoría es obligatorio' });
+        return res.status(400).json({ error: 'El nombre de la entrada es obligatorio' });
       }
 
-      if (price === undefined || isNaN(Number(price)) || Number(price) < 0) {
+      if (price === undefined || price === null || price === '' || isNaN(Number(price)) || Number(price) < 0) {
         return res.status(400).json({ error: 'El precio debe ser un número mayor o igual a 0' });
-      }
-
-      if (!totalQuota || isNaN(Number(totalQuota)) || Number(totalQuota) <= 0) {
-        return res.status(400).json({ error: 'El cupo total debe ser un número entero mayor a 0' });
       }
 
       let targetEventId = eventId;
@@ -239,7 +254,12 @@ export class AdminController {
         targetEventId = activeEvent.id;
       }
 
-      const quota = Math.floor(Number(totalQuota));
+      // Si no se especifica cupo, se asigna 500 cupos disponibles por defecto
+      let quota = 500;
+      if (totalQuota !== undefined && totalQuota !== null && !isNaN(Number(totalQuota)) && Number(totalQuota) > 0) {
+        quota = Math.floor(Number(totalQuota));
+      }
+
       const ticketPrice = Number(price);
 
       const created = await prisma.ticketType.create({
@@ -274,25 +294,31 @@ export class AdminController {
         return res.status(404).json({ error: 'Categoría de entrada no encontrada' });
       }
 
-      const parsedTotal = totalQuota !== undefined ? Math.floor(Number(totalQuota)) : undefined;
-      let parsedRemaining = remainingQuota !== undefined ? Math.floor(Number(remainingQuota)) : undefined;
-
-      // Si se amplía el cupo total sin especificar remaining, ajustamos la diferencia
-      if (parsedTotal !== undefined && parsedRemaining === undefined) {
+      const dataToUpdate: any = {};
+      if (name !== undefined && typeof name === 'string' && name.trim()) {
+        dataToUpdate.name = name.trim();
+      }
+      if (description !== undefined) {
+        dataToUpdate.description = description ? description.trim() : null;
+      }
+      if (price !== undefined && price !== null && price !== '' && !isNaN(Number(price)) && Number(price) >= 0) {
+        dataToUpdate.price = Number(price);
+      }
+      if (totalQuota !== undefined && !isNaN(Number(totalQuota)) && Number(totalQuota) > 0) {
+        const parsedTotal = Math.floor(Number(totalQuota));
+        dataToUpdate.totalQuota = parsedTotal;
         const diff = parsedTotal - existing.totalQuota;
-        parsedRemaining = Math.max(0, existing.remainingQuota + diff);
+        dataToUpdate.remainingQuota = Math.max(0, existing.remainingQuota + diff);
+      } else if (remainingQuota !== undefined && !isNaN(Number(remainingQuota))) {
+        dataToUpdate.remainingQuota = Math.floor(Number(remainingQuota));
+      }
+      if (isActive !== undefined) {
+        dataToUpdate.isActive = Boolean(isActive);
       }
 
       const updated = await prisma.ticketType.update({
         where: { id },
-        data: {
-          name: name ? name.trim() : undefined,
-          description: description !== undefined ? (description ? description.trim() : null) : undefined,
-          price: price !== undefined ? Number(price) : undefined,
-          totalQuota: parsedTotal,
-          remainingQuota: parsedRemaining,
-          isActive,
-        },
+        data: dataToUpdate,
       });
 
       return res.json({
