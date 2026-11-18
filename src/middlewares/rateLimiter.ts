@@ -6,23 +6,24 @@ import rateLimit from 'express-rate-limit';
  * para permitir la operación fluida de varios miembros de staff en la misma red WiFi del evento.
  */
 export const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 10, // 10 solicitudes por ventana
-  standardHeaders: true, // Retorna RateLimit-* en cabeceras
-  legacyHeaders: false, // Deshabilita cabeceras X-RateLimit-* obsoletas
+  windowMs: 5 * 60 * 1000, // 5 minutos
+  max: 100, // 100 intentos por ventana
+  skipSuccessfulRequests: true, // Inicios de sesión correctos NO consumen el límite
+  standardHeaders: true,
+  legacyHeaders: false,
   message: {
-    error: 'Demasiados intentos de inicio de sesión desde esta conexión. Por seguridad, intenta nuevamente en 15 minutos.',
+    error: 'Demasiados intentos fallidos de inicio de sesión. Por seguridad, espera 5 minutos.',
     code: 'RATE_LIMIT_EXCEEDED',
   },
 });
 
 /**
  * Limitador para evitar acaparamiento y compras masivas de boletos por bots.
- * Máximo 25 reservas de boletos cada 15 minutos por IP.
+ * Máximo 100 reservas de boletos cada 5 minutos por IP.
  */
 export const checkoutLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 25,
+  windowMs: 5 * 60 * 1000,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -34,11 +35,11 @@ export const checkoutLimiter = rateLimit({
 /**
  * Limitador para la consulta pública de certificados por carnet de identidad.
  * Previene la enumeración masiva o scraping de cédulas de identidad.
- * Máximo 60 consultas cada 15 minutos por IP.
+ * Máximo 200 consultas cada 5 minutos por IP.
  */
 export const certificateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 60,
+  windowMs: 5 * 60 * 1000,
+  max: 200,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -49,15 +50,15 @@ export const certificateLimiter = rateLimit({
 
 /**
  * Limitador general para la API.
- * Máximo 400 solicitudes por cada 15 minutos por IP.
+ * Máximo 6000 solicitudes por cada 5 minutos por IP para soportar dashboards en tiempo real y múltiples usuarios.
  */
 export const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 400,
+  windowMs: 5 * 60 * 1000,
+  max: 6000,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
-    error: 'Demasiadas solicitudes enviadas al servidor. Por favor intenta más tarde.',
+    error: 'Demasiadas solicitudes enviadas al servidor. Por favor intenta en un momento.',
     code: 'RATE_LIMIT_EXCEEDED',
   },
 });
