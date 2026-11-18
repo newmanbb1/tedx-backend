@@ -32,9 +32,22 @@ export class VolunteerController {
         }
       }
 
-      if (!eventId || !buyerName || !buyerDocumentId || !buyerPhone || !attendees || attendees.length === 0) {
+      let resolvedBuyerName = buyerName;
+      let resolvedBuyerDocumentId = buyerDocumentId;
+      let resolvedBuyerPhone = buyerPhone;
+      let resolvedBuyerEmail = buyerEmail;
+
+      if ((!resolvedBuyerName || !resolvedBuyerDocumentId || !resolvedBuyerPhone) && Array.isArray(attendees) && attendees.length > 0) {
+        const first = attendees[0];
+        if (!resolvedBuyerName) resolvedBuyerName = first.attendeeName;
+        if (!resolvedBuyerDocumentId) resolvedBuyerDocumentId = first.attendeeDocumentId;
+        if (!resolvedBuyerPhone) resolvedBuyerPhone = first.attendeePhone || '00000000';
+        if (!resolvedBuyerEmail) resolvedBuyerEmail = first.attendeeEmail || `${first.attendeeDocumentId}@tedx.local`;
+      }
+
+      if (!eventId || !resolvedBuyerName || !resolvedBuyerDocumentId || !resolvedBuyerPhone || !attendees || attendees.length === 0) {
         return res.status(400).json({
-          error: 'Faltan campos obligatorios (evento, comprador, carnet, teléfono y lista de asistentes)',
+          error: 'Faltan campos obligatorios (evento, datos de asistentes y teléfono)',
         });
       }
 
@@ -48,10 +61,10 @@ export class VolunteerController {
       const order = await OrderService.createVolunteerOrder({
         input: {
           eventId,
-          buyerName: buyerName.trim(),
-          buyerEmail: (buyerEmail || 'sin-correo@tedx.local').trim(),
-          buyerPhone: buyerPhone.trim(),
-          buyerDocumentId: buyerDocumentId.trim(),
+          buyerName: resolvedBuyerName.trim(),
+          buyerEmail: (resolvedBuyerEmail || `${resolvedBuyerDocumentId.trim()}@tedx.local`).trim(),
+          buyerPhone: resolvedBuyerPhone.trim(),
+          buyerDocumentId: resolvedBuyerDocumentId.trim(),
           attendees,
         },
         paymentMethod: method,
