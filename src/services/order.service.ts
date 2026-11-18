@@ -8,6 +8,7 @@ export interface CreateOrderItemInput {
   ticketTypeId: string;
   attendeeName: string;
   attendeeEmail?: string | null;
+  attendeePhone?: string | null;
   attendeeDocumentId: string;
 }
 
@@ -163,6 +164,7 @@ export class OrderService {
             ticketTypeId: attendee.ticketTypeId,
             attendeeName: attendee.attendeeName,
             attendeeEmail: attendee.attendeeEmail || null,
+            attendeePhone: attendee.attendeePhone || null,
             attendeeDocumentId: attendee.attendeeDocumentId,
             qrCodeData: '',
           },
@@ -300,6 +302,7 @@ export class OrderService {
             ticketTypeId: attendee.ticketTypeId,
             attendeeName: attendee.attendeeName,
             attendeeEmail: attendee.attendeeEmail || null,
+            attendeePhone: attendee.attendeePhone || null,
             attendeeDocumentId: attendee.attendeeDocumentId,
             qrCodeData: qrPayload,
           },
@@ -341,21 +344,24 @@ export class OrderService {
         }).catch((err) => console.warn('[OrderService] Error enviando correo de tickets en efectivo:', err.message));
       }
 
-      if (isCash && order.buyerPhone) {
+      if (isCash) {
         for (const ticket of tickets) {
-          WhatsAppService.sendTicket({
-            phone: order.buyerPhone,
-            ticket: {
-              id: ticket.id,
-              ticketCode: ticket.ticketCode,
-              attendeeName: ticket.attendeeName,
-              attendeeDocumentId: ticket.attendeeDocumentId,
-              qrCodeData: ticket.qrCodeData || undefined,
-              ticketType: { name: ticket.ticketType.name },
-            },
-            event: order.event,
-            orderNumber: order.orderNumber,
-          }).catch((err) => console.warn('[OrderService] Error encolando WhatsApp en venta presencial:', err.message));
+          const phoneToSend = ticket.attendeePhone || order.buyerPhone;
+          if (phoneToSend) {
+            WhatsAppService.sendTicket({
+              phone: phoneToSend,
+              ticket: {
+                id: ticket.id,
+                ticketCode: ticket.ticketCode,
+                attendeeName: ticket.attendeeName,
+                attendeeDocumentId: ticket.attendeeDocumentId,
+                qrCodeData: ticket.qrCodeData || undefined,
+                ticketType: { name: ticket.ticketType.name },
+              },
+              event: order.event,
+              orderNumber: order.orderNumber,
+            }).catch((err) => console.warn('[OrderService] Error encolando WhatsApp en venta presencial:', err.message));
+          }
         }
       }
 
@@ -493,11 +499,12 @@ export class OrderService {
       }).catch((err) => console.warn('[OrderService] Error enviando email de aprobación:', err.message));
     }
 
-    if (order.buyerPhone) {
-      const ticketsToSend = updatedOrder.tickets || order.tickets;
-      for (const ticket of ticketsToSend) {
+    const ticketsToSend = updatedOrder.tickets || order.tickets;
+    for (const ticket of ticketsToSend) {
+      const phoneToSend = ticket.attendeePhone || order.buyerPhone;
+      if (phoneToSend) {
         WhatsAppService.sendTicket({
-          phone: order.buyerPhone,
+          phone: phoneToSend,
           ticket: {
             id: ticket.id,
             ticketCode: ticket.ticketCode,
@@ -509,7 +516,7 @@ export class OrderService {
           event: order.event,
           orderNumber: order.orderNumber,
         })
-          .then((res) => console.log(`[OrderService] Boleto ${ticket.ticketCode} encolado para WhatsApp a ${order.buyerPhone}:`, res.message))
+          .then((res) => console.log(`[OrderService] Boleto ${ticket.ticketCode} encolado para WhatsApp a ${phoneToSend}:`, res.message))
           .catch((err) => console.warn(`[OrderService] Error encolando ticket ${ticket.ticketCode} para WhatsApp:`, err.message));
       }
     }

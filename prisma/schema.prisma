@@ -228,6 +228,7 @@ model Ticket {
   ticketType         TicketType   @relation(fields: [ticketTypeId], references: [id])
   attendeeName       String
   attendeeEmail      String?
+  attendeePhone      String?
   attendeeDocumentId String
   qrCodeData         String
   isCheckedIn        Boolean      @default(false)

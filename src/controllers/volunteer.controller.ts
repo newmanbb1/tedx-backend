@@ -122,7 +122,7 @@ export class VolunteerController {
           });
         }
 
-        const phoneToSend = targetPhone || ticket.order.buyerPhone;
+        const phoneToSend = targetPhone || ticket.attendeePhone || ticket.order.buyerPhone;
         const result = await WhatsAppService.sendTicket({
           phone: phoneToSend,
           ticket: {
@@ -184,13 +184,14 @@ export class VolunteerController {
         });
       }
 
-      const phoneToSend = targetPhone || order.buyerPhone;
+      const defaultPhone = targetPhone || order.buyerPhone;
       const results = [];
       let lastWaMeUrl = '';
 
       for (const ticket of order.tickets) {
+        const ticketPhone = ticket.attendeePhone || defaultPhone;
         const sendRes = await WhatsAppService.sendTicket({
-          phone: phoneToSend,
+          phone: ticketPhone,
           ticket: {
             id: ticket.id,
             ticketCode: ticket.ticketCode,
@@ -233,7 +234,7 @@ export class VolunteerController {
         message: `Procesado el envío de ${order.tickets.length} entradas por WhatsApp`,
         results,
         waMeUrl: lastWaMeUrl,
-        formattedPhone: WhatsAppService.formatPhoneNumber(phoneToSend),
+        formattedPhone: WhatsAppService.formatPhoneNumber(defaultPhone),
       });
     } catch (error: any) {
       console.error('[VolunteerController.dispatchWhatsApp]', error);

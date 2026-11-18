@@ -17,7 +17,12 @@ export class CheckInController {
         if (codeOrPayload.startsWith('{') && codeOrPayload.endsWith('}')) {
           const parsed = JSON.parse(codeOrPayload);
           if (parsed.code) {
-            ticketCode = parsed.code;
+            ticketCode = parsed.code.trim();
+          }
+        } else if (codeOrPayload.includes('ticket=')) {
+          const match = codeOrPayload.match(/[?&]ticket=([^&#]+)/);
+          if (match && match[1]) {
+            ticketCode = decodeURIComponent(match[1]).trim();
           }
         }
       } catch {
