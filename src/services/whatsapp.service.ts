@@ -422,14 +422,6 @@ _Presenta el código QR adjunto en la puerta de ingreso del Teatro Gran Mariscal
 
         // Si ya tenemos el QR en base64 listo, retornarlo inmediatamente
         if (data.base64) {
-          // Si Baileys ya acumuló más de 6 reintentos de QR, programar reinicio preventivo para el próximo ciclo
-          if (typeof data.count === 'number' && data.count >= 7) {
-            setTimeout(async () => {
-              try {
-                await this.restartInstance();
-              } catch {}
-            }, 500);
-          }
           return data;
         }
       }
