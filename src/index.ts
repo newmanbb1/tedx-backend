@@ -13,6 +13,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Confianza en el proxy inverso (Nginx) para identificar IPs de clientes en rate limiting
+app.set('trust proxy', 1);
+
 // Cabeceras de seguridad HTTP con Helmet
 app.use(
   helmet({
