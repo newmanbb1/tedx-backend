@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { OrderStatus } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
 import { OrderService } from '../services/order.service.js';
@@ -319,12 +320,27 @@ export class OrderController {
 
   static async getStatus(req: Request, res: Response) {
     try {
-      const { idOrNumber } = req.params;
+      const rawQuery = req.params.idOrNumber?.trim() || '';
 
-      const order = await prisma.order.findFirst({
+      if (!rawQuery) {
+        return res.status(400).json({ error: 'Ingresa un número de orden o carnet de identidad' });
+      }
+
+      const cleanDoc = rawQuery.replace(/^(ci[:\s]*|c\.i\.[:\s]*)/i, '').trim();
+
+      const matchingOrders = await prisma.order.findMany({
         where: {
-          OR: [{ id: idOrNumber }, { orderNumber: idOrNumber }],
+          OR: [
+            { id: rawQuery },
+            { orderNumber: { equals: rawQuery, mode: 'insensitive' } },
+            { buyerDocumentId: { equals: rawQuery, mode: 'insensitive' } },
+            { buyerDocumentId: { equals: cleanDoc, mode: 'insensitive' } },
+            { tickets: { some: { attendeeDocumentId: { equals: rawQuery, mode: 'insensitive' } } } },
+            { tickets: { some: { attendeeDocumentId: { equals: cleanDoc, mode: 'insensitive' } } } },
+            { tickets: { some: { ticketCode: { equals: rawQuery, mode: 'insensitive' } } } },
+          ],
         },
+        orderBy: { createdAt: 'desc' },
         include: {
           orderItems: {
             include: { ticketType: true },
@@ -336,31 +352,44 @@ export class OrderController {
         },
       });
 
-      if (!order) {
-        return res.status(404).json({ error: 'Orden no encontrada' });
+      if (!matchingOrders || matchingOrders.length === 0) {
+        return res.status(404).json({
+          error: `No encontramos ninguna orden ni entrada asociada a "${rawQuery}". Verifica tu carnet de identidad (CI) o número de orden.`,
+        });
       }
 
-      let enrichedTickets = order.tickets;
-      if (order.status === 'APPROVED') {
-        enrichedTickets = await Promise.all(
-          order.tickets.map(async (t) => {
-            let qrDataUrl = '';
-            if (t.qrCodeData) {
-              qrDataUrl = await QRService.generateQRCodeDataUrl(t.qrCodeData);
-            }
-            return {
-              ...t,
-              qrDataUrl,
-            };
-          })
-        );
-      }
+      // Priorizar orden aprobada si existe alguna, o la más reciente
+      const primaryOrder =
+        matchingOrders.find((o) => o.status === OrderStatus.APPROVED) || matchingOrders[0];
+
+      const enrichOrderTickets = async (ord: typeof primaryOrder) => {
+        let enrichedTickets = ord.tickets;
+        if (ord.status === OrderStatus.APPROVED) {
+          enrichedTickets = await Promise.all(
+            ord.tickets.map(async (t) => {
+              let qrDataUrl = '';
+              if (t.qrCodeData) {
+                qrDataUrl = await QRService.generateQRCodeDataUrl(t.qrCodeData);
+              }
+              return {
+                ...t,
+                qrDataUrl,
+              };
+            })
+          );
+        }
+        return {
+          ...ord,
+          tickets: enrichedTickets,
+        };
+      };
+
+      const enrichedPrimary = await enrichOrderTickets(primaryOrder);
+      const enrichedAll = await Promise.all(matchingOrders.map(enrichOrderTickets));
 
       return res.json({
-        order: {
-          ...order,
-          tickets: enrichedTickets,
-        },
+        order: enrichedPrimary,
+        orders: enrichedAll,
       });
     } catch (error) {
       console.error('Error al consultar orden:', error);
