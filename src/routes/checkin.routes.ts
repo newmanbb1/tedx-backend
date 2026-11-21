@@ -5,7 +5,7 @@ import { authenticate, requireRole } from '../middlewares/auth.middleware.js';
 
 const router = Router();
 
-router.use(authenticate, requireRole([Role.ADMIN, Role.STAFF]));
+router.use(authenticate, requireRole([Role.ADMIN, Role.STAFF, Role.CHECKIN]));
 
 router.post('/validate', CheckInController.validateTicket);
 router.get('/search', CheckInController.searchAttendees);
