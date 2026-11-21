@@ -60,9 +60,13 @@ export class CheckInController {
         });
       }
 
-      if (ticket.isCheckedIn) {
+      const MAX_CHECKS = 4;
+      const currentChecks = ticket.checkInCount || (ticket.isCheckedIn ? 1 : 0);
+
+      if (currentChecks >= MAX_CHECKS) {
         const timeStr = ticket.checkedInAt
-          ? new Date(ticket.checkedInAt).toLocaleTimeString('es-ES', {
+          ? new Date(ticket.checkedInAt).toLocaleTimeString('es-BO', {
+              timeZone: 'America/La_Paz',
               hour: '2-digit',
               minute: '2-digit',
               second: '2-digit',
@@ -71,7 +75,7 @@ export class CheckInController {
 
         return res.status(409).json({
           status: 'ALREADY_USED',
-          error: `¡Atención! Este boleto ya fue ingresado a las ${timeStr} por ${
+          error: `¡Atención! Este boleto ya completó los ${MAX_CHECKS} ingresos permitidos (${currentChecks}/${MAX_CHECKS}). Último registro a las ${timeStr} por ${
             ticket.checkedInBy?.name || 'Staff'
           }`,
           ticket: {
@@ -80,14 +84,19 @@ export class CheckInController {
             attendeeDocumentId: ticket.attendeeDocumentId,
             ticketType: ticket.ticketType.name,
             checkedInAt: ticket.checkedInAt,
+            checkInCount: currentChecks,
+            maxChecks: MAX_CHECKS,
           },
         });
       }
+
+      const nextCheckCount = currentChecks + 1;
 
       const updatedTicket = await prisma.ticket.update({
         where: { id: ticket.id },
         data: {
           isCheckedIn: true,
+          checkInCount: nextCheckCount,
           checkedInAt: new Date(),
           checkedInById: req.user?.id,
         },
@@ -101,7 +110,7 @@ export class CheckInController {
 
       return res.json({
         status: 'SUCCESS',
-        message: '¡Acreditación Exitosa! Acceso Autorizado.',
+        message: `¡Acreditación Exitosa! Acceso Autorizado (Check ${nextCheckCount} de ${MAX_CHECKS}).`,
         ticket: {
           ticketCode: updatedTicket.ticketCode,
           attendeeName: updatedTicket.attendeeName,
@@ -110,6 +119,8 @@ export class CheckInController {
           ticketType: updatedTicket.ticketType.name,
           checkedInAt: updatedTicket.checkedInAt,
           checkedInBy: updatedTicket.checkedInBy?.name,
+          checkInCount: updatedTicket.checkInCount,
+          maxChecks: MAX_CHECKS,
         },
       });
     } catch (error) {

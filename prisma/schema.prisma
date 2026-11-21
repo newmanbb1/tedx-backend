@@ -232,6 +232,7 @@ model Ticket {
   attendeeDocumentId String
   qrCodeData         String
   isCheckedIn        Boolean      @default(false)
+  checkInCount       Int          @default(0)
   checkedInAt        DateTime?
   checkedInById      String?
   checkedInBy        User?        @relation("StaffCheckIn", fields: [checkedInById], references: [id])

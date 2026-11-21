@@ -10,6 +10,9 @@ import { prisma } from './config/prisma.js';
 
 dotenv.config();
 
+// Configurar zona horaria oficial de Bolivia (GMT-4 / America/La_Paz)
+process.env.TZ = 'America/La_Paz';
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 
